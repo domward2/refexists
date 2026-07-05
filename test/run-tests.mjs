@@ -8,7 +8,7 @@ import {
   extractIdentifiers,
   verifyReference,
   STATUS,
-} from '../verifier.js';
+} from '../public/verifier.js';
 
 let pass = 0;
 let fail = 0;

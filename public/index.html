@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.crossref.org https://api.datacite.org https://doi.org https://api.openalex.org https://eutils.ncbi.nlm.nih.gov https://openlibrary.org; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>RefExists — check that your references actually exist</title>
+<meta name="description" content="Free citation reality-checker. Paste a bibliography and your browser verifies every reference against Crossref, DataCite, doi.org, OpenAlex, PubMed and Open Library — catching fabricated DOIs, AI-hallucinated references and retracted papers. No account, no upload, no server.">
+<meta property="og:title" content="RefExists — do your references actually exist?">
+<meta property="og:description" content="Catch fabricated DOIs, AI-hallucinated references and retracted papers. 100% in your browser — nothing is uploaded, because there is no server.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="drawer-label" role="presentation">free · open · no account · nothing leaves your browser except registry lookups</div>
+  <div class="masthead-inner">
+    <a class="wordmark" href="/" aria-label="RefExists home">Ref<span class="wordmark-stamp">Exists</span></a>
+    <nav class="masthead-nav" aria-label="Sections">
+      <a href="#verdicts">Verdicts</a>
+      <a href="#limits">Limits</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Do your references <em>actually exist?</em></h1>
+    <p class="lede">
+      Paste a bibliography — or any text containing citations. Your browser checks every
+      reference directly against the world's scholarly registries
+      <span class="lede-registries">(Crossref&nbsp;· DataCite&nbsp;· doi.org&nbsp;· OpenAlex&nbsp;· PubMed&nbsp;· Open&nbsp;Library)</span>
+      and flags the ones that don't hold up: fabricated DOIs, AI&#8209;hallucinated references,
+      real identifiers stitched onto the wrong paper, and works that have been <strong>retracted</strong>.
+    </p>
+
+    <form id="check-form" class="card-input-wrap">
+      <label class="visually-hidden" for="refs-input">Reference list to check</label>
+      <textarea id="refs-input" class="card-input" rows="9" spellcheck="false"
+        placeholder="[1] Watson, J. D., &amp; Crick, F. H. C. (1953). Molecular structure of nucleic acids. Nature, 171, 737–738. https://doi.org/10.1038/171737a0&#10;[2] Vaswani, A., et al. (2017). Attention is all you need. NeurIPS 30.&#10;[3] …one reference per line, per block, or numbered — any common format."></textarea>
+      <div class="input-actions">
+        <button type="submit" id="check-btn" class="btn-stamp">Check references</button>
+        <button type="button" id="example-btn" class="btn-quiet">Load a worked example</button>
+        <span id="progress" class="progress" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+
+  <section id="results-section" class="results" hidden aria-live="polite">
+    <div id="summary" class="summary"></div>
+    <ol id="results" class="cards"></ol>
+    <p class="results-footnote">
+      Every verdict above was produced by live lookups from <em>your</em> browser to the public
+      registries — nothing was pre-computed. Click any evidence link to see the registry record yourself.
+    </p>
+  </section>
+
+  <section id="verdicts" class="doc">
+    <h2>What the verdicts mean</h2>
+    <dl class="verdict-legend">
+      <div><dt><span class="stamp stamp-green stamp-inline">Verified</span></dt>
+        <dd>The identifier (DOI, arXiv ID or PMID) resolves, <em>and</em> the registered title, author and year match this citation.</dd></div>
+      <div><dt><span class="stamp stamp-green stamp-inline stamp-outline">Match found</span></dt>
+        <dd>No identifier was given, but a registry record closely matches the cited title, author and year.</dd></div>
+      <div><dt><span class="stamp stamp-green stamp-inline stamp-outline">Exists</span></dt>
+        <dd>A bare identifier with no citation text around it — it resolves, but there is nothing to compare it against.</dd></div>
+      <div><dt><span class="stamp stamp-amber stamp-inline">Check me</span></dt>
+        <dd>A record was found but only partly matches (e.g. right title, wrong year). Compare by hand before trusting either way.</dd></div>
+      <div><dt><span class="stamp stamp-amber stamp-inline stamp-outline">Unconfirmed</span></dt>
+        <dd>The DOI is registered (per doi.org) with an agency whose metadata this tool cannot read — existence confirmed, contents not.</dd></div>
+      <div><dt><span class="stamp stamp-red stamp-inline">Mismatch</span></dt>
+        <dd>The identifier is real but registered to a <em>different work</em> than the one cited — the classic AI-fabrication signature.</dd></div>
+      <div><dt><span class="stamp stamp-red stamp-inline">Not found</span></dt>
+        <dd>The identifier is definitively absent from the global registries (confirmed 404, not a network hiccup).</dd></div>
+      <div><dt><span class="stamp stamp-red stamp-inline stamp-outline">No record</span></dt>
+        <dd>No identifier, and nothing close in 250M+ indexed works. Could be fabricated — or misspelled, very new, or simply not indexed. Treat as a lead, not a conviction.</dd></div>
+      <div><dt><span class="stamp stamp-redheavy stamp-inline">Retracted</span></dt>
+        <dd>The work exists but has been <strong>retracted</strong> (per OpenAlex). Citing it as valid evidence is misleading.</dd></div>
+      <div><dt><span class="stamp stamp-grey stamp-inline">Can't check</span></dt>
+        <dd>Web pages, news articles and other non-scholarly sources can't be fetched from your browser. Open the link and check it yourself.</dd></div>
+      <div><dt><span class="stamp stamp-grey stamp-inline stamp-outline">Retry</span></dt>
+        <dd>A registry could not be reached. This is explicitly <em>not</em> a verdict about the reference.</dd></div>
+    </dl>
+  </section>
+
+  <section id="limits" class="doc">
+    <h2>What this tool does <em>not</em> tell you</h2>
+    <ul class="limits-list">
+      <li><strong>“Verified” means the reference exists — not that it supports the claim it is cited for.</strong> A real paper can still be cited misleadingly. Read your sources.</li>
+      <li><strong>No legal case-law.</strong> Court citations (cases, statutes) live in different databases. For US case law try <a href="https://www.courtlistener.com" rel="noopener">CourtListener</a>.</li>
+      <li><strong>Coverage has edges.</strong> Books, theses, reports, non-English and very recent works are under-indexed. “No record” for these is weak evidence — verify by hand.</li>
+      <li><strong>Retraction data is incomplete.</strong> A missing retraction flag is not proof a work stands; check <a href="https://retractionwatch.com" rel="noopener">Retraction Watch</a> for anything critical.</li>
+      <li><strong>Match scoring is heuristic.</strong> The similarity between your citation and the registry record is computed from titles, authors and years — it can misjudge unusual formats. The evidence for every verdict is shown so you can overrule it.</li>
+    </ul>
+  </section>
+
+  <section id="privacy" class="doc">
+    <h2>Privacy, by construction</h2>
+    <p>
+      There is no server behind this page — it is a static file. Your text is never uploaded
+      to us because there is no “us” to upload to. When you press <em>Check</em>, your browser
+      queries the public scholarly registries directly (Crossref, DataCite, doi.org, OpenAlex,
+      PubMed, Open Library), exactly as if you had searched them yourself. Those registries see
+      the individual reference queries — from your IP address, not through any intermediary —
+      and nothing else. No account, no cookies, no analytics, no logs of your text.
+      The page's <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" rel="noopener">Content-Security-Policy</a>
+      makes this enforceable: the browser refuses any connection except to those six registries.
+      The entire checker is <a href="verifier.js">one readable JavaScript file</a> — audit it.
+    </p>
+  </section>
+</main>
+
+<footer class="colophon">
+  <p>
+    <span class="wordmark-foot">RefExists</span> — a free, open harm-prevention tool.
+    Built with public infrastructure:
+    <a href="https://www.crossref.org" rel="noopener">Crossref</a>,
+    <a href="https://datacite.org" rel="noopener">DataCite</a>,
+    <a href="https://www.doi.org" rel="noopener">doi.org</a>,
+    <a href="https://openalex.org" rel="noopener">OpenAlex</a>,
+    <a href="https://pubmed.ncbi.nlm.nih.gov" rel="noopener">PubMed</a>,
+    <a href="https://openlibrary.org" rel="noopener">Open Library</a>.
+    Not affiliated with any of them. No warranty; verdicts are evidence-backed leads, not accusations.
+  </p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

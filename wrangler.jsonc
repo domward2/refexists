@@ -1,0 +1,15 @@
+{
+  // RefExists — assets-only Cloudflare Worker (no server code at all).
+  // Deploy: npx wrangler deploy
+  // The custom_domain route auto-creates exactly ONE DNS record
+  // (refexists.dsl4.com) and touches nothing else on the zone.
+  "name": "refexists",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    { "pattern": "refexists.dsl4.com", "custom_domain": true }
+  ]
+}
