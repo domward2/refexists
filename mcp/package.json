@@ -1,0 +1,44 @@
+{
+  "name": "refexists-mcp",
+  "version": "0.1.0",
+  "description": "Local, keyless MCP server that lets an AI agent verify its own citations against Crossref, DataCite, doi.org, OpenAlex, PubMed and Open Library — catching fabricated DOIs, hallucinated references, wrong-paper DOIs and retractions before it emits them.",
+  "type": "module",
+  "bin": {
+    "refexists-mcp": "server.js"
+  },
+  "main": "server.js",
+  "files": [
+    "server.js",
+    "engine.js",
+    "README.md"
+  ],
+  "scripts": {
+    "prepack": "cp ../public/verifier.js ./engine.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "citation",
+    "citation-verification",
+    "hallucination",
+    "doi",
+    "crossref",
+    "openalex",
+    "academic-integrity",
+    "reference-checker"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/domward2/refexists.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://refexists.dsl4.com",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  }
+}

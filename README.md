@@ -45,10 +45,24 @@ python3 -m http.server 8471 --directory public
 
 No build step, no dependencies. The whole engine is [`public/verifier.js`](public/verifier.js).
 
+## For AI agents — MCP server
+
+The same engine ships as a **local, keyless MCP server** so an agent can verify its own
+citations before it emits them (hallucinated citations are caused by LLMs — catch them in
+the loop). All registry calls run on the user's machine; there is no hosted backend.
+
+```bash
+cd mcp && npm install
+# then point Claude Desktop / Claude Code / Cursor at:  node /abs/path/mcp/server.js
+```
+
+Exposes a `verify_citations` tool. See [`mcp/README.md`](mcp/README.md).
+
 ## Test
 
 ```bash
-node test/run-tests.mjs   # 16 live-API cases: pass, fail, and honesty classes
+node test/run-tests.mjs        # 25 live-API cases: pass, fail, honesty, adversarial
+cd mcp && node test-client.mjs # end-to-end MCP protocol test
 ```
 
 ## Deploy
