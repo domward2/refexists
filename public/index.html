@@ -75,8 +75,8 @@
         <dd>The identifier is real but registered to a <em>different work</em> than the one cited — the classic AI-fabrication signature.</dd></div>
       <div><dt><span class="stamp stamp-red stamp-inline">Not found</span></dt>
         <dd>The identifier is definitively absent from the global registries (confirmed 404, not a network hiccup).</dd></div>
-      <div><dt><span class="stamp stamp-red stamp-inline stamp-outline">No record</span></dt>
-        <dd>No identifier, and nothing close in 250M+ indexed works. Could be fabricated — or misspelled, very new, or simply not indexed. Treat as a lead, not a conviction.</dd></div>
+      <div><dt><span class="stamp stamp-amber stamp-inline stamp-outline">Not indexed</span></dt>
+        <dd>No identifier, and no close match in the indexes searched. Could be fabricated, or simply not indexed (books, theses, non-English, very new). The tool can't tell which — a lead to check, never a conviction. Only the two <em>red</em> verdicts are things it can prove.</dd></div>
       <div><dt><span class="stamp stamp-redheavy stamp-inline">Retracted</span></dt>
         <dd>The work exists but has been <strong>retracted</strong> (per OpenAlex). Citing it as valid evidence is misleading.</dd></div>
       <div><dt><span class="stamp stamp-grey stamp-inline">Can't check</span></dt>
@@ -93,7 +93,8 @@
       <li><strong>No legal case-law.</strong> Court citations (cases, statutes) live in different databases. For US case law try <a href="https://www.courtlistener.com" rel="noopener">CourtListener</a>.</li>
       <li><strong>Coverage has edges.</strong> Books, theses, reports, non-English and very recent works are under-indexed. “No record” for these is weak evidence — verify by hand.</li>
       <li><strong>Retraction data is incomplete.</strong> A missing retraction flag is not proof a work stands; check <a href="https://retractionwatch.com" rel="noopener">Retraction Watch</a> for anything critical.</li>
-      <li><strong>Match scoring is heuristic.</strong> The similarity between your citation and the registry record is computed from titles, authors and years — it can misjudge unusual formats. The evidence for every verdict is shown so you can overrule it.</li>
+      <li><strong>Match scoring is heuristic.</strong> The similarity between your citation and the registry record is computed from titles, authors and years — it can misjudge unusual formats, and references whose first author has a very short surname may land on “Check me” rather than green. The evidence for every verdict is shown so you can overrule it.</li>
+      <li><strong>Paste plain references.</strong> One per line, per blank-line block, or numbered (<code>[1]</code>, <code>1.</code>). BibTeX and RIS files aren't parsed yet — paste the human-readable reference list, not the <code>.bib</code>.</li>
     </ul>
   </section>
 
@@ -104,10 +105,16 @@
       to us because there is no “us” to upload to. When you press <em>Check</em>, your browser
       queries the public scholarly registries directly (Crossref, DataCite, doi.org, OpenAlex,
       PubMed, Open Library), exactly as if you had searched them yourself. Those registries see
-      the individual reference queries — from your IP address, not through any intermediary —
-      and nothing else. No account, no cookies, no analytics, no logs of your text.
+      the individual reference queries — from your IP address, not through any intermediary.
+      The Crossref queries also carry a fixed contact address (<code>ghostcite@dsl4.com</code>,
+      the same for every visitor, per Crossref's <a href="https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/" rel="noopener">politeness convention</a>) — that identifies the tool, never you.
+      No account, no cookies, no analytics, no logs of your text.
       The page's <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" rel="noopener">Content-Security-Policy</a>
-      makes this enforceable: the browser refuses any connection except to those six registries.
+      makes this enforceable: the browser will not load a script, or open an app connection,
+      to anywhere but those six registries.
+      (The host, Cloudflare, tries to inject its own cookieless analytics beacon, as it does on
+      every site it serves; this page's policy blocks it before it runs, so no analytics loads —
+      you can confirm that in your browser's network tab.)
       The entire checker is <a href="verifier.js">one readable JavaScript file</a> — audit it.
     </p>
   </section>

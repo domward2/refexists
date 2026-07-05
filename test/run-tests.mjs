@@ -6,6 +6,7 @@
 import {
   splitReferences,
   extractIdentifiers,
+  extractMeta,
   verifyReference,
   STATUS,
 } from '../public/verifier.js';
@@ -48,6 +49,24 @@ console.log('\n[unit] extractIdentifiers');
 
   const ax = extractIdentifiers('Vaswani et al., arXiv:1706.03762v5');
   check('arXiv id extracted', ax.arxiv === '1706.03762', ax.arxiv);
+
+  // C2: angle-bracket-wrapped DOI (LaTeX \url, plaintext, email)
+  const angle = extractIdentifiers('Watson & Crick (1953). <https://doi.org/10.1038/171737a0>');
+  check('C2: trailing > stripped from DOI', angle.doi === '10.1038/171737a0', angle.doi);
+}
+
+// ---------- unit: year extraction (I2) ----------
+console.log('\n[unit] extractMeta year');
+{
+  check('I2: parenthesised year preferred over page span',
+    extractMeta('Smith, J. (2019). A title. Journal, 5(2), pp. 2013-2020.').year === 2019,
+    String(extractMeta('Smith, J. (2019). A title. Journal, 5(2), pp. 2013-2020.').year));
+  check('I2: page range alone yields no year',
+    extractMeta('Smith, J. A title. Journal, pp. 2013-2020.').year === undefined,
+    String(extractMeta('Smith, J. A title. Journal, pp. 2013-2020.').year));
+  check('I2: historical year in range (1925)',
+    extractMeta('Fisher, R. A. (1925). Statistical Methods. Oliver and Boyd.').year === 1925,
+    String(extractMeta('Fisher, R. A. (1925). Statistical Methods. Oliver and Boyd.').year));
 }
 
 // ---------- live: PASS cases (real citations must verify) ----------
@@ -99,6 +118,27 @@ console.log('\n[live] FAIL cases (the harm we catch)');
 {
   const r = await verifyReference('Vaswani, A. et al. (2024). Attention is all you need 2: attention harder. arXiv:9912.99999');
   check('fabricated arXiv id → not_found', r.status === STATUS.NOT_FOUND, r.status);
+}
+{
+  // C1: real DOI, fabricated authors + wrong year — must NOT be "Verified"
+  const r = await verifyReference('Bogus, Q., & Fraud, Z. (1999). Attention is all you need. arXiv:1706.03762');
+  check('C1: real arXiv id + fake authors/year → NOT verified', r.status !== STATUS.VERIFIED, `${r.status} conf=${r.confidence?.toFixed(2)}`);
+  check('C1: downgraded to partial (check me)', r.status === STATUS.PARTIAL, r.status);
+}
+{
+  // C1b: real DOI, fabricated authors + wrong year (Watson/Crick DOI)
+  const r = await verifyReference('Fakeson, Q., & Notreal, Z. (1925). Molecular structure of nucleic acids: A structure for deoxyribose nucleic acid. https://doi.org/10.1038/171737a0');
+  check('C1b: real DOI + fabricated authors/year → NOT verified', r.status !== STATUS.VERIFIED, `${r.status} conf=${r.confidence?.toFixed(2)}`);
+}
+{
+  // C3: title-collision with fabricated authors, no identifier — not green
+  const r = await verifyReference('Nobody, X., & Noone, Y. (2015). Deep residual learning for image recognition. Some Journal.');
+  check('C3: title match + fake authors, no id → not LIKELY(green)', r.status !== STATUS.LIKELY, `${r.status} conf=${r.confidence?.toFixed(2)} found=${r.found?.title}`);
+}
+{
+  // C2 live: angle-bracket DOI on a real paper → must verify, not accuse
+  const r = await verifyReference('Watson, J. D., & Crick, F. H. C. (1953). Molecular structure of nucleic acids. Nature 171, 737. <https://doi.org/10.1038/171737a0>');
+  check('C2 live: angle-bracket DOI → verified (not accused)', r.status === STATUS.VERIFIED, `${r.status} doi=${r.ids?.doi}`);
 }
 
 // ---------- live: honesty cases ----------

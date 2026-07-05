@@ -38,8 +38,8 @@ const STAMP = {
     line: 'This identifier is real but registered to a different work than the one cited — a classic fabrication signature. Compare below.' },
   [STATUS.NOT_FOUND]:     { text: 'Not found',   cls: 'stamp-red',                   tally: 'red',
     line: 'This identifier is definitively absent from the global registries (confirmed, not a network error). It may be fabricated or badly mistyped.' },
-  [STATUS.NO_MATCH]:      { text: 'No record',   cls: 'stamp-red stamp-outline',     tally: 'red',
-    line: 'Nothing close was found in 250M+ indexed works. Could be fabricated — or misspelled, very new, or not indexed. Treat as a lead to verify, not a conviction.' },
+  [STATUS.NO_MATCH]:      { text: 'Not indexed', cls: 'stamp-amber stamp-outline',   tally: 'amber',
+    line: 'No identifier, and no close match in the indexes searched. That can mean the reference is fabricated — or simply not indexed (books, theses, non-English or very recent work). This tool cannot tell which; verify it yourself before relying on it either way.' },
   [STATUS.UNCHECKABLE]:   { text: "Can't check", cls: 'stamp-grey',                  tally: 'grey',
     line: 'Web content — your browser cannot fetch other websites to verify this. Open the link and check it yourself.' },
   [STATUS.ERROR]:         { text: 'Retry',       cls: 'stamp-grey stamp-outline',    tally: 'grey',
@@ -79,6 +79,13 @@ function renderCard(r) {
   head.appendChild(stamp);
   li.appendChild(head);
 
+  let verdictLine = conf.line;
+  if (r.doiUnresolved) {
+    verdictLine = 'The DOI you gave does not resolve — but a real work matching the rest of your citation does exist (shown below). You have most likely mistyped the DOI. Check it against the record.';
+  } else if (r.metaConflict) {
+    verdictLine = 'The identifier resolves to a real work whose title matches — but the year in your citation conflicts with the registered record and the author could not be confirmed. Verify you have cited the right paper, and copied its details correctly.';
+  }
+
   if (r.retracted) {
     const banner = el('div', 'retraction-banner');
     banner.append(
@@ -91,9 +98,9 @@ function renderCard(r) {
     banner.appendChild(rw);
     banner.appendChild(document.createTextNode('.'));
     li.appendChild(banner);
-    li.appendChild(el('p', 'verdict-line', `Underlying check: ${conf.line}`));
+    li.appendChild(el("p", "verdict-line", `Underlying check: ${verdictLine}`));
   } else {
-    li.appendChild(el('p', 'verdict-line', conf.line));
+    li.appendChild(el("p", "verdict-line", verdictLine));
   }
 
   // Side-by-side comparison for the dangerous cases

@@ -403,3 +403,10 @@ h1 em { font-style: italic; color: var(--oxblood); }
   .card-input { padding-left: 50px; }
   .evidence-key { min-width: 72px; }
 }
+
+/* Very narrow viewports (small phones / split panes): keep the rotated stamps
+   from exceeding the frame. */
+@media (max-width: 430px) {
+  .stamp { font-size: 12.5px; letter-spacing: 0.09em; padding: 4px 9px 3px; max-width: 100%; }
+  .cmp, .evidence { overflow-wrap: anywhere; }
+}

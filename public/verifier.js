@@ -125,11 +125,20 @@ const PMID_RE = /\bPMID[:\s]*(\d{4,9})/i;
 
 function cleanDoi(doi) {
   let d = doi.replace(/[.,;:!?]+$/, '');
-  // Strip a trailing ')' only when unbalanced — DOIs like
-  // 10.1016/S0140-6736(97)11096-0 legitimately contain parentheses.
-  while (d.endsWith(')') && (d.match(/\(/g) || []).length < (d.match(/\)/g) || []).length) {
-    d = d.slice(0, -1).replace(/[.,;:!?]+$/, '');
-  }
+  // Strip a trailing bracket only when UNBALANCED. DOIs legitimately contain
+  // both '()' (e.g. 10.1016/S0140-6736(97)11096-0) and '<>' (SICI DOIs like
+  // 10.1002/(SICI)…<636::AID-ANIE636>3.0.CO;2-1), so a balanced closer is kept.
+  // Trailing '>' happens when a DOI is written <https://doi.org/…> (LaTeX \url,
+  // plaintext, email) — that dangling '>' must not turn a real DOI into 404.
+  const trimUnbalanced = (open, close) => {
+    const oc = new RegExp('\\' + open, 'g');
+    const cc = new RegExp('\\' + close, 'g');
+    while (d.endsWith(close) && (d.match(oc) || []).length < (d.match(cc) || []).length) {
+      d = d.slice(0, -1).replace(/[.,;:!?]+$/, '');
+    }
+  };
+  trimUnbalanced('(', ')');
+  trimUnbalanced('<', '>');
   return d;
 }
 
@@ -146,13 +155,28 @@ export function extractIdentifiers(ref) {
   return ids;
 }
 
+const YEAR = '(?:1[5-9]\\d\\d|20[0-4]\\d)'; // 1500–2049, covers historical works
+
 export function extractMeta(ref) {
   const meta = {};
   const quoted = ref.match(/[“"']([^”"']{15,300})[”"']/);
   if (quoted) meta.quotedTitle = quoted[1];
-  const years = [...ref.matchAll(/\b(19[5-9]\d|20[0-4]\d)[a-z]?\b/g)].map((m) => parseInt(m[1], 10));
-  if (years.length) meta.year = years[0];
-  const isBookish = /\b(Press|Publishing|Publishers|Books|Wiley|Springer|Routledge|Penguin|HarperCollins|Random House|edition|ed\.\)|eds?\.)\b/i.test(ref)
+
+  // A parenthesised year (APA/Chicago author-date) is the reliable signal; take
+  // it first. Otherwise scan, but mask page ranges (737–738, pp. 2013-2020) and
+  // "p./pp. NNNN" markers so a page number is never mistaken for the year.
+  const paren = ref.match(new RegExp('\\((' + YEAR + ')[a-z]?\\)'));
+  if (paren) {
+    meta.year = parseInt(paren[1], 10);
+  } else {
+    const masked = ref
+      .replace(/\b\d{1,4}\s*[–-]\s*\d{1,4}\b/g, ' ') // numeric ranges (pages, spans)
+      .replace(/\bpp?\.\s*\d+/gi, ' ');              // "p. 2013" / "pp. 2013"
+    const m = masked.match(new RegExp('\\b(' + YEAR + ')[a-z]?\\b'));
+    if (m) meta.year = parseInt(m[1], 10);
+  }
+
+  const isBookish = /\b(Press|Publishing|Publishers|Books|Wiley|Springer|Routledge|Penguin|HarperCollins|Random House|edition|ed\.\)|eds?\.|Verlag|[ÉE]ditions|Editorial|Editrice|Editora|Uitgeverij|F[öo]rlag|Wydawnictwo|Gallimard|Sudamericana)\b/i.test(ref)
     && !/\bjournal\b/i.test(ref);
   meta.bookish = isBookish;
   return meta;
@@ -314,8 +338,21 @@ async function pubmedById(pmid) {
 // Scoring: does this registry record match what the citation claims?
 // ---------------------------------------------------------------------------
 
+const JUNK_TITLES = new Set([
+  'about the author', 'about the authors', 'editorial board', 'table of contents',
+  'contents', 'index', 'subject index', 'author index', 'introduction', 'preface',
+  'foreword', 'cover', 'title page', 'front matter', 'back matter', 'frontmatter',
+  'acknowledgements', 'acknowledgments', 'references', 'bibliography',
+  'list of contributors', 'notes on contributors', 'abstract', 'contributors',
+  'list of figures', 'list of tables', 'copyright', 'masthead', 'errata',
+]);
+
 export function scoreMatch(work, refText, refMeta) {
   if (!work?.title) return { score: 0, parts: {} };
+  // Generic front-matter records pollute registry search (Crossref indexes
+  // "About the Author", "Editorial Board", etc. as works). They match short
+  // fabricated titles by coincidence, so refuse them as candidates.
+  if (JUNK_TITLES.has(normalize(work.title))) return { score: 0, parts: { junk: true } };
   const containment = titleContainment(work.title, refText);
   const refNorm = normalize(refText);
   const firstAuthor = work.authors?.[0] ? normalize(work.authors[0]) : '';
@@ -365,14 +402,68 @@ function substanceBeyondIds(refText, ids) {
   return significantTokens(t).length;
 }
 
+/** Does the citation's own author/year corroborate the registry record? */
+function corroboration(scored, work, meta) {
+  const authorOk = scored.parts.authorHit === 1;
+  const yearOk = !!(work.year && meta.year && Math.abs(work.year - meta.year) <= 1);
+  const yearConflict = !!(work.year && meta.year && Math.abs(work.year - meta.year) >= 2);
+  return { authorOk, yearOk, yearConflict };
+}
+
+/**
+ * Search Crossref → OpenAlex → (books) Open Library for the best matching
+ * record. Returns { best, anyError }. Never throws.
+ */
+async function searchForBest(refText, meta, checks) {
+  const cs = await crossrefSearch(refText);
+  checks.push({ source: 'Crossref', kind: 'bibliographic-search', outcome: cs.error ? 'error' : 'searched', detail: cs.error });
+  let best = cs.error ? null : pickBest(cs.works, refText, meta);
+
+  if (!best || best.scored.score < 0.75) {
+    const oa = await openAlexSearch(refText);
+    checks.push({ source: 'OpenAlex', kind: 'search', outcome: oa.error ? 'error' : 'searched', detail: oa.error });
+    if (!oa.error) {
+      const oaBest = pickBest(oa.works, refText, meta);
+      if (oaBest && (!best || oaBest.scored.score > best.scored.score)) best = oaBest;
+    }
+  }
+
+  // Books are under-represented in Crossref/OpenAlex; consult Open Library
+  // whenever the match is still weak, not only when English publisher keywords
+  // were spotted (which miss "Verlag", "Éditions", "Sudamericana", …).
+  if (!best || best.scored.score < 0.6) {
+    const ol = await openLibrarySearch(refText);
+    checks.push({ source: 'Open Library', kind: 'search', outcome: ol.error ? 'error' : 'searched', detail: ol.error });
+    if (!ol.error) {
+      const olBest = pickBest(ol.works, refText, meta);
+      if (olBest && (!best || olBest.scored.score > best.scored.score)) best = olBest;
+    }
+  }
+
+  const searchChecks = checks.filter((c) => c.kind.includes('search'));
+  const anyError = searchChecks.some((c) => c.outcome === 'error');
+  return { best, anyError };
+}
+
 function grade(result, work, refText, meta, substance) {
   result.found = work;
   if (substance < 4) return { ...result, status: STATUS.DOI_ONLY, confidence: 1 };
   const scored = scoreMatch(work, refText, meta);
   result.confidence = scored.score;
   result.scoreParts = scored.parts;
-  if (scored.score >= 0.6) return { ...result, status: STATUS.VERIFIED };
-  if (scored.score <= 0.3) return { ...result, status: STATUS.MISMATCH };
+  const c = scored.parts.containment || 0;
+  const { authorOk, yearOk, yearConflict } = corroboration(scored, work, meta);
+
+  // The identifier resolved to a real record, so the only honest failures here
+  // are conflicts, never "not found".
+  //   - Title matches AND (author OR year) corroborates → Verified.
+  //   - Title clearly doesn't match the record → Mismatch (wrong work).
+  //   - Anything else (title matches but nothing corroborates, or the year
+  //     actively conflicts) → Check me. Title weight alone must NOT reach green:
+  //     a real DOI stitched onto fabricated authors/year is the target pattern.
+  if (c >= 0.6 && (authorOk || yearOk)) return { ...result, status: STATUS.VERIFIED };
+  if (c <= 0.3) return { ...result, status: STATUS.MISMATCH };
+  if (c >= 0.55 && !authorOk && yearConflict) result.metaConflict = true;
   return { ...result, status: STATUS.PARTIAL };
 }
 
@@ -402,6 +493,22 @@ export async function verifyReference(refText) {
         checks.push({ source: 'doi.org handle registry', kind: 'existence', outcome: h.error ? 'error' : h.found ? 'found' : 'absent', detail: h.error });
         if (h.error) return { ...result, status: STATUS.ERROR };
         if (h.found) return { ...result, status: STATUS.UNVERIFIED_RA };
+        // The DOI is definitively unregistered. Before accusing the reference,
+        // check whether the REST of the citation matches a real work — a strong,
+        // author-corroborated hit means the likely fault is a typo'd DOI, not a
+        // fabricated source. Surface that as "Check me", not red "Not found".
+        if (substance >= 6) {
+          const { best } = await searchForBest(refText, meta, checks);
+          if (best) {
+            const { authorOk, yearOk } = corroboration(best.scored, best.work, meta);
+            if ((best.scored.parts.containment || 0) >= 0.7 && (authorOk || yearOk)) {
+              result.found = best.work;
+              result.confidence = best.scored.score;
+              result.doiUnresolved = true;
+              return { ...result, status: STATUS.PARTIAL };
+            }
+          }
+        }
         return { ...result, status: STATUS.NOT_FOUND };
       }
     }
@@ -443,44 +550,35 @@ export async function verifyReference(refText) {
   }
 
   // --- Path 5: unstructured reference → registry search ---------------------
-  const cs = await crossrefSearch(refText);
-  checks.push({ source: 'Crossref', kind: 'bibliographic-search', outcome: cs.error ? 'error' : 'searched', detail: cs.error });
-  let best = cs.error ? null : pickBest(cs.works, refText, meta);
-
-  if (!best || best.scored.score < 0.75) {
-    const oa = await openAlexSearch(refText);
-    checks.push({ source: 'OpenAlex', kind: 'search', outcome: oa.error ? 'error' : 'searched', detail: oa.error });
-    if (!oa.error) {
-      const oaBest = pickBest(oa.works, refText, meta);
-      if (oaBest && (!best || oaBest.scored.score > best.scored.score)) best = oaBest;
-    }
-  }
-
-  if ((!best || best.scored.score < 0.55) && meta.bookish) {
-    const ol = await openLibrarySearch(refText);
-    checks.push({ source: 'Open Library', kind: 'search', outcome: ol.error ? 'error' : 'searched', detail: ol.error });
-    if (!ol.error) {
-      const olBest = pickBest(ol.works, refText, meta);
-      if (olBest && (!best || olBest.scored.score > best.scored.score)) best = olBest;
-    }
-  }
-
-  const searchChecks = checks.filter((c) => c.kind.includes('search'));
-  if (searchChecks.length && searchChecks.every((c) => c.outcome === 'error')) {
-    return { ...result, status: STATUS.ERROR };
-  }
+  const { best, anyError } = await searchForBest(refText, meta, checks);
 
   if (best) {
     result.found = best.work;
     result.confidence = best.scored.score;
     result.scoreParts = best.scored.parts;
     if (best.work.retracted) result.retracted = true;
-    if (best.scored.score >= 0.75) return { ...result, status: STATUS.LIKELY };
-    if (best.scored.score >= 0.55) return { ...result, status: STATUS.PARTIAL };
+    const c = best.scored.parts.containment || 0;
+    const { authorOk, yearOk } = corroboration(best.scored, best.work, meta);
+    // No identifier: a title alone can collide with a decoy in a 250M-record
+    // index, so a green "Match found" requires the author to corroborate the
+    // title. (Registry records are sometimes mis-dated, so the year is NOT
+    // required for green — author agreement is the disambiguator.)
+    if (c >= 0.72 && authorOk) {
+      return { ...result, status: STATUS.LIKELY };
+    }
+    // "Check me": a near-exact title (author unconfirmed — could be a decoy or a
+    // short/awkward surname), OR a moderate title backed by author/year.
+    if (c >= 0.72 || (c >= 0.55 && (authorOk || yearOk))) {
+      return { ...result, status: STATUS.PARTIAL };
+    }
+  }
+  // Nothing convincing. If a registry errored while we were searching, this is
+  // "Retry", not an absence verdict.
+  if (anyError && (!best || best.scored.score < 0.5)) {
+    return { ...result, status: STATUS.ERROR };
   }
   // A ref anchored to a non-scholarly URL that we couldn't match is web
-  // content we cannot fetch client-side — honesty demands "uncheckable",
-  // not an accusation.
+  // content we cannot fetch client-side — honesty demands "uncheckable".
   if (ids.urls.length) return { ...result, status: STATUS.UNCHECKABLE };
   return { ...result, status: STATUS.NO_MATCH };
 }
