@@ -10,7 +10,7 @@
  * negative from the registry (HTTP 404 / handle responseCode 100).
  */
 
-const MAILTO = 'ghostcite@dsl4.com';
+const MAILTO = 'ghostcite@refexists.dsl4.com';
 const FETCH_TIMEOUT_MS = 12000;
 const MAX_REFS = 100;
 
