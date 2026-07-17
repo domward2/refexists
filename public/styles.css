@@ -405,8 +405,7 @@ h1 em { font-style: italic; color: var(--oxblood); }
   transition: opacity .2s ease;
 }
 .vg-credit:hover { opacity: .9; }
-/* chartreuse wordmark needs a dark chip on this light footer (--ink at .8) */
-.vg-logo { height: 20px; width: auto; display: block; background: rgba(33, 29, 23, .8); border-radius: 4px; padding: 2px 6px; box-sizing: content-box; }
+.vg-logo { height: 20px; width: auto; display: block; }
 .vg-tag {
   text-transform: uppercase;
   letter-spacing: .14em;
