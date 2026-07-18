@@ -1,0 +1,3 @@
+# Local tooling / build artifacts (contain machine-specific + account data)
+.wrangler/
+.gstack/
